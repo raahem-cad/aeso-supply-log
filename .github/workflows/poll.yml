@@ -26,7 +26,11 @@ jobs:
       - name: Fetch snapshot
         env:
           AESO_API_KEY: ${{ secrets.AESO_API_KEY }}
-        run: ./poll.sh
+        # `bash poll.sh`, not `./poll.sh`: this repo is authored on Windows,
+        # where git does not track the executable bit, so the committed file has
+        # mode 644 and `./poll.sh` dies with "Permission denied" (exit 126).
+        # Invoking the interpreter directly means the mode bit never matters.
+        run: bash poll.sh
 
       - name: Commit
         run: |
