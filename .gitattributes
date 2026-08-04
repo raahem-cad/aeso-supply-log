@@ -1,0 +1,6 @@
+# poll.sh runs on a Linux runner but is edited on Windows. Without this, CRLF
+# line endings get committed and the runner fails with a confusing
+# "bad interpreter: /usr/bin/env bash^M".
+*.sh text eol=lf
+*.yml text eol=lf
+*.csv text eol=lf

@@ -1,0 +1,39 @@
+name: poll
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub's scheduler runs late under load and occasionally
+    # skips, so actual spacing varies; n_samples per hour on the reading side
+    # shows what really landed.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two runs must never race on the push. Queue the second rather than letting it
+# fail: a delayed schedule can overlap with the next tick or a manual dispatch.
+concurrency:
+  group: poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch snapshot
+        env:
+          AESO_API_KEY: ${{ secrets.AESO_API_KEY }}
+        run: ./poll.sh
+
+      - name: Commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add snapshots
+          # poll.sh exits early on a duplicate stamp, leaving nothing staged.
+          git diff --staged --quiet && echo "nothing new to commit" && exit 0
+          git commit -m "snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push
