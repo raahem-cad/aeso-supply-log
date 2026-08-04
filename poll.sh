@@ -23,8 +23,24 @@ HEADER="effective_utc,fuel_type,net_generation_mw,max_capability_mw,alberta_inte
 
 : "${AESO_API_KEY:?AESO_API_KEY is not set}"
 
-resp=$(curl -sS --fail --retry 3 --retry-delay 5 --max-time 30 \
-            -H "API-KEY: ${AESO_API_KEY}" "$URL")
+# Strip whitespace and newlines. `gh secret set` reading from a prompt or a
+# piped file readily captures a trailing newline, which turns the header into
+# "API-KEY: abc\n" and earns a 401 that looks exactly like a wrong key. The R
+# poller has always done trimws() on this for the same reason.
+key="${AESO_API_KEY//[$'\r\n\t ']/}"
+
+# Length only, never the value: 401s here are nearly always a mangled secret
+# rather than a revoked key, and comparing this against the real key's length is
+# the fastest way to tell the two apart.
+echo "using API key of length ${#key}"
+
+if ! resp=$(curl -sS --fail --retry 3 --retry-delay 5 --max-time 30 \
+                 -H "API-KEY: ${key}" "$URL" 2>&1); then
+  echo "AESO request failed: $resp" >&2
+  echo "A 401 means the AESO_API_KEY secret is wrong or mangled. Reset it with:" >&2
+  echo "  gh secret set AESO_API_KEY --repo raahem-cad/aeso-supply-log" >&2
+  exit 1
+fi
 
 # AESO returns "2026-08-04 19:45" (UTC, no seconds). Normalise to ISO 8601 so
 # readr::col_datetime() parses it without a format string.
