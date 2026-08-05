@@ -23,11 +23,13 @@ HEADER="effective_utc,fuel_type,net_generation_mw,max_capability_mw,alberta_inte
 
 : "${AESO_API_KEY:?AESO_API_KEY is not set}"
 
-# Strip whitespace and newlines. `gh secret set` reading from a prompt or a
-# piped file readily captures a trailing newline, which turns the header into
-# "API-KEY: abc\n" and earns a 401 that looks exactly like a wrong key. The R
-# poller has always done trimws() on this for the same reason.
-key="${AESO_API_KEY//[$'\r\n\t ']/}"
+# Strip whitespace, newlines and quotes. Setting this secret readily captures a
+# trailing newline, or the surrounding quotes if the value was copied from a
+# config file, and either turns the header into something like "API-KEY: \"abc\""
+# and earns a 401 that looks exactly like a wrong key. Both have now happened
+# here. AESO keys are 32 hex-ish characters, so none of these can be legitimate
+# content. The R poller has always done trimws() for the same reason.
+key="${AESO_API_KEY//[$'\r\n\t '\"\']/}"
 
 # Length only, never the value: 401s here are nearly always a mangled secret
 # rather than a revoked key, and comparing this against the real key's length is

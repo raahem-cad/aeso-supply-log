@@ -33,11 +33,43 @@ jobs:
         run: bash poll.sh
 
       - name: Commit
+        env:
+          AESO_API_KEY: ${{ secrets.AESO_API_KEY }}
+        # The push can be rejected even with the concurrency group above. The
+        # group queues a second RUN, but each run checks out at its own start, so
+        # a run that was already checked out and waiting pushes a commit built on
+        # a tip that has since moved. Two triggers (cron-job.org dispatch plus
+        # the schedule fallback) make that collision routine rather than rare.
+        #
+        # Resolve it by throwing our commit away and redoing the work against the
+        # winner's tree, rather than rebasing. poll.sh is idempotent against the
+        # file: if the other run already logged this stamp it skips and we exit
+        # clean, and if it logged a different one we append cleanly after it. A
+        # rebase would instead conflict on the same last line of the same CSV and
+        # would need resolving in YAML, which is how you end up with duplicate
+        # rows in the one artifact that cannot be re-derived.
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add snapshots
-          # poll.sh exits early on a duplicate stamp, leaving nothing staged.
-          git diff --staged --quiet && echo "nothing new to commit" && exit 0
-          git commit -m "snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          git push
+
+          commit_and_push() {
+            git add snapshots
+            # poll.sh exits early on a duplicate stamp, leaving nothing staged.
+            if git diff --staged --quiet; then
+              echo "nothing new to commit"
+              return 0
+            fi
+            git commit -m "snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push
+          }
+
+          for attempt in 1 2 3; do
+            if commit_and_push; then exit 0; fi
+            echo "push rejected (attempt $attempt), redoing against the new tip"
+            git fetch origin main
+            git reset --hard origin/main
+            bash poll.sh
+          done
+
+          echo "still could not push after 3 attempts" >&2
+          exit 1
