@@ -1,0 +1,90 @@
+name: backfill
+
+# AESO publishes each month's settled hourly file to Box about five weeks after
+# the month ends, on no fixed day. Rather than guess the day, check daily and do
+# nothing when there is nothing new.
+#
+# fetch_box.sh compares Box's full list against what is already committed, so
+# this is self-healing: a run GitHub skips (its scheduler is unreliable, see
+# poll.yml) just means the file lands a day later. That is why this has no
+# external trigger of its own.
+on:
+  schedule:
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backfill
+  cancel-in-progress: false
+
+jobs:
+  # Split from the build so the ~29 no-op days a month cost 15 seconds on a
+  # plain runner instead of pulling the multi-gigabyte R image to discover
+  # there is nothing to do.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      new: ${{ steps.fetch.outputs.new }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: fetch
+        run: |
+          bash fetch_box.sh | tee fetch.log
+          echo "new=$(grep -oE 'new months downloaded: [0-9]+' fetch.log | grep -oE '[0-9]+$')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.fetch.outputs.new != '0'
+        with:
+          name: raw-archives
+          path: raw/
+          retention-days: 1
+
+  build:
+    needs: check
+    if: needs.check.outputs.new != '0'
+    runs-on: ubuntu-latest
+    # readr/dplyr/lubridate/tidyr come preinstalled, so the only install cost is
+    # the two plotting/HTTP packages supply.R loads at the top. Paying ~1 minute
+    # a month is cheaper than keeping a second copy of read_csd_month() in sync.
+    container: rocker/tidyverse:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: raw-archives
+          path: raw/
+
+      - name: Install supply.R's remaining dependencies
+        run: install.packages(c("plotly", "httr2"))
+        shell: Rscript {0}
+
+      - name: Build monthly partitions
+        run: Rscript build_hourly.R
+
+      - name: Commit
+        # Same retry-against-the-new-tip approach as poll.yml: the poller commits
+        # every 10 minutes, so this job's checkout is very likely stale by the
+        # time it finishes. Nothing to redo on a rejection here, since the built
+        # CSVs do not depend on the tip, so a rebase is enough.
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add hourly
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+            exit 0
+          fi
+          git commit -m "hourly: add $(git diff --staged --name-only | wc -l) month(s)"
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push rejected (attempt $attempt), rebasing onto the new tip"
+            git pull --rebase origin main
+          done
+          echo "still could not push after 3 attempts" >&2
+          exit 1

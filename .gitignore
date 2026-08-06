@@ -1,0 +1,5 @@
+# Downloaded AESO archives. These are inputs, not outputs: build_hourly.R turns
+# each one into a CSV under hourly/, and they are re-downloadable from Box at
+# any time by fetch_box.sh. ~2 MB of incompressible binary per month is not
+# something to keep in git history forever.
+raw/
