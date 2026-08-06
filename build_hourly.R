@@ -1,18 +1,17 @@
 # ==============================================================================
 # Turn the zips fetch_box.sh downloaded into one CSV per month under hourly/.
 # ==============================================================================
-# Deliberately thin. The parse lives in read_csd_month() in supply.R and is
-# sourced, not reimplemented: the MST-to-UTC handling is the subtle part of this
-# whole project (a wall-clock dedupe silently eats one hour every November
-# fall-back), and a second implementation in another language is how that goes
-# stale without anyone noticing. poll.sh refuses to do the fuel rollup for the
-# same reason.
+# Deliberately thin. The parse lives in csd_parse.R and is sourced, not
+# reimplemented: the MST-to-UTC handling is the subtle part of this whole
+# pipeline (a wall-clock dedupe silently eats one hour every November
+# fall-back), and a second implementation is how that goes stale without anyone
+# noticing. poll.sh refuses to do the fuel rollup for the same reason.
 #
 # Running R here costs a few minutes once a month. The reason the poller is bash
 # is that 4,320 runs/month of R would blow the free Actions allowance; that
 # arithmetic does not apply at monthly cadence.
 # ==============================================================================
-suppressMessages(source("supply.R"))
+suppressMessages(source("csd_parse.R"))
 
 zips <- list.files("raw", pattern = "^\\d{4}-\\d{2}\\.zip$", full.names = TRUE)
 if (!length(zips)) {

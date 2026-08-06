@@ -3,3 +3,9 @@
 # any time by fetch_box.sh. ~2 MB of incompressible binary per month is not
 # something to keep in git history forever.
 raw/
+
+# The analysis project's supply.R holds the chart code, the colour palette and
+# the commentary, none of which belongs in a public repo. It was copied here
+# once by accident and had to be scrubbed from history. The ingest side needs
+# only csd_parse.R, which is why that file exists separately.
+supply.R
