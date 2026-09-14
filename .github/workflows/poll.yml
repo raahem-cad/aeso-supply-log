@@ -20,6 +20,13 @@ concurrency:
 jobs:
   poll:
     runs-on: ubuntu-latest
+    # A run that cannot get a runner assigned (a GitHub-side queue stall, not a poll.sh problem)
+    # would otherwise sit in this group's one "waiting" slot indefinitely, cancelling every
+    # 10-minute trigger behind it for as long as the stall lasts -- exactly what produced the
+    # 2026-09-12/13 gap (run 34718230862 queued ~20.5h before running; its own steps took 7s).
+    # Capped well under the 10-minute cadence so a stall costs at most one missed poll, not a
+    # blackout: normal runs finish in single-digit seconds, so 5 minutes is pure headroom.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
