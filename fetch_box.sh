@@ -26,8 +26,20 @@ UA="Mozilla/5.0"
 
 mkdir -p raw hourly
 
-listing=$(curl -sSL --fail --retry 3 --retry-delay 5 --max-time 60 -A "$UA" \
-               "$BASE/s/$SHARED_NAME/folder/$HOURLY_FOLDER_ID")
+get_page() {
+  curl -sSL --fail --retry 3 --retry-delay 5 --max-time 60 -A "$UA" \
+       "$BASE/s/$SHARED_NAME/folder/$HOURLY_FOLDER_ID?page=$1"
+}
+
+# Box paginates the listing and its sort order is not chronological: in 2026-10
+# page 1 held 2015-2017 and 2021 onward while 2018-2020 sat on page 2. Reading
+# only page 1 would silently stop picking up new months the day one lands on a
+# later page, so walk every page the listing advertises.
+listing=$(get_page 1)
+pages=$(grep -oE '"pageCount":[0-9]+' <<<"$listing" | head -1 | grep -oE '[0-9]+$' || true)
+for ((p = 2; p <= ${pages:-1}; p++)); do
+  listing+=$(get_page "$p")
+done
 
 # Pull "<file id> <YYYY-MM>" for single-month archives only. The 2015-2022 files
 # are six-month bundles ("... - 2015-01 to 2015-06.zip") and were backfilled
