@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Append one AESO Current Supply Demand snapshot to snapshots/YYYY-MM.csv
+# Append one AESO Current Supply Demand snapshot to snapshots/YYYY-MM.csv,
+# and its per-intertie flows to interchange/YYYY-MM.csv
 # ==============================================================================
 # The CSD endpoint takes no date parameter: it only ever returns "now". AESO
 # stopped publishing 5-minute CSD data in 2023, so at sub-hourly grain this log
@@ -82,3 +83,24 @@ jq -er --arg ts "$stamp_iso" '
 ' <<<"$resp" >> "$file"
 
 echo "appended $stamp_iso to $file"
+
+# Per-intertie flows from the same response, one row per path. Same rules as
+# above: verbatim path names, same stamp, monthly partition. Positive = export
+# (the paths sum to net_actual_interchange).
+#
+# Written AFTER the generation rows and never fatal: a missing or reshaped
+# interchange_list must not cost a generation snapshot, which is the record
+# that cannot be recovered. The workflow stages interchange/, so the file is
+# always created even when no rows come back.
+ix_file="interchange/interchange_snapshots_${stamp:0:7}.csv"
+mkdir -p interchange
+[[ -f $ix_file ]] || echo "effective_utc,path,actual_flow_mw" > "$ix_file"
+if ix_rows=$(jq -r --arg ts "$stamp_iso" '
+      .return.interchange_list // [] | .[]
+      | [ $ts, .path, (.actual_flow | tostring) ] | join(",")
+    ' <<<"$resp") && [[ -n $ix_rows ]]; then
+  echo "$ix_rows" >> "$ix_file"
+  echo "appended $(wc -l <<<"$ix_rows") interchange rows to $ix_file"
+else
+  echo "warning: no interchange_list rows for $stamp_iso, generation still logged" >&2
+fi

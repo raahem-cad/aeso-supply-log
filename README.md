@@ -1,11 +1,12 @@
 # aeso-supply-log
 
-Alberta generation data, kept current without anyone's laptop being on. Two
-datasets:
+Alberta generation and intertie data, kept current without anyone's laptop
+being on. Three datasets:
 
 | | grain | cadence | source |
 |---|---|---|---|
 | `snapshots/` | ~10 min x sub-fuel | every 10 min | CSD API |
+| `interchange/` | ~10 min x intertie | every 10 min, from 2026-10-15 | CSD API (same poll) |
 | `hourly/` | 1 hour x sub-fuel | monthly | AESO's published files |
 
 Together they are the whole picture: `hourly/` is settled and authoritative back
@@ -36,6 +37,7 @@ supply.R                                 shared reader/parser, copied from the a
 .github/workflows/poll.yml               every 10 min (triggered externally)
 .github/workflows/backfill.yml           daily check, acts only when a month lands
 snapshots/supply_snapshots_YYYY-MM.csv   the live log
+interchange/interchange_snapshots_YYYY-MM.csv  actual flow per intertie, same polls
 hourly/supply_hourly_YYYY-MM.csv         the settled history, 2015-01 onward
 ```
 
@@ -113,6 +115,22 @@ language rather than silently going stale here the next time AESO adds a fuel.
 
 Duplicate `effective_utc` values can occur when AESO's feed stalls between
 polls. Dedupe on `(effective_utc, fuel_type)` when reading.
+
+### `interchange/`
+
+| column | notes |
+|---|---|
+| `effective_utc` | same stamp as the generation rows from the same poll |
+| `path` | **verbatim from the API**: `British Columbia`, `Montana`, `Saskatchewan` |
+| `actual_flow_mw` | `actual_flow`, telemetered. Positive = export |
+
+The CSD response's `interchange_list`, which `snapshots/` used to drop. The
+paths sum to that poll's `net_actual_interchange`. This is **physical** flow,
+not the scheduled volumes AESO settles on (those come from the Metered Volume
+API, hourly, with history), so it differs from schedules by ramping and
+unscheduled flow, mostly on the two AC ties. Starts 2026-10-15; nothing earlier
+exists. A poll whose response lacks `interchange_list` still logs generation and
+writes no interchange rows. Dedupe on `(effective_utc, path)` when reading.
 
 ## Reading it
 

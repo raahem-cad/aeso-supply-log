@@ -61,6 +61,8 @@ jobs:
 
           commit_and_push() {
             git add snapshots
+            # interchange/ does not exist until poll.sh first logs a fresh stamp.
+            if [ -d interchange ]; then git add interchange; fi
             # poll.sh exits early on a duplicate stamp, leaving nothing staged.
             if git diff --staged --quiet; then
               echo "nothing new to commit"
