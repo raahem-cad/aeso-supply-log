@@ -3989,3 +3989,6 @@ effective_utc,path,actual_flow_mw
 2026-10-24T20:49:00Z,British Columbia,243
 2026-10-24T20:49:00Z,Montana,80
 2026-10-24T20:49:00Z,Saskatchewan,0
+2026-10-24T20:59:00Z,British Columbia,188
+2026-10-24T20:59:00Z,Montana,64
+2026-10-24T20:59:00Z,Saskatchewan,-33
